@@ -1,152 +1,143 @@
-Project Report: AI-Based Facial Wrinkle Reduction Using Diffusion Inpainting
-1) Introduction
+# face-diffusion — Facial Wrinkle Reduction using SDXL Inpainting
 
-The motivation behind this project is simple and powerful:
+> Realistic skin refinements using Stable Diffusion XL Inpainting — preserving identity while reducing wrinkle visibility.
 
-Allow a user to upload a normal selfie and receive a subtle, realistic wrinkle-reduced version — without Photoshop, without 3D face scanning, and without medical intervention.
+This project explores the use of **diffusion-based masked editing** to simulate subtle cosmetic enhancements (e.g. Botox-like wrinkle reduction) without modifying identity.
 
-This is specifically designed for use-cases like:
+No retargeting.  
+No generative replacement.  
+Only **local inpainting** over precise facial regions.
 
-dermatologists / cosmetic clinics showing “what Botox might approximate”
+---
 
-content creators needing natural enhancement of footage
+## Example: original vs enhanced outputs
 
-privacy-safe, client-side cosmetic prototyping
+| Original Input | Batch Strength/Seed Variants | Chin Region Comparison |
+|---|---|---|
+| ![original](https://raw.githubusercontent.com/ju7stritesh/face-diffusion/main/original.jpg) | ![grid](https://raw.githubusercontent.com/ju7stritesh/face-diffusion/main/batch_out/grid.png) | ![chin_grid](https://raw.githubusercontent.com/ju7stritesh/face-diffusion/main/region_out/chin/chin_grid.png) |
 
-The goal is not to drastically alter appearance — it is to preserve identity and improve skin consistency in a controlled, photo-realistic way.
+---
 
-We targeted these areas first:
+## What this repo contains
 
-forehead wrinkles
+| File | Purpose |
+|------|---------|
+| `simple_face_inpaint_sdxl.py` | single-shot whole-face wrinkle softening using SDXL Inpaint |
+| `batch_wrinkle_search.py` | strength × seed sweeps to generate comparison grids |
+| `region_wrinkle_search_sdxl.py` | forehead / under-eye / smile-line / chin selective masking in multi-pass form |
 
-under-eye bags
+---
 
-smile lines / nasolabial folds
+## Why SDXL?
 
-chin texture refinement
+### Prior attempts (SD1.5 / SD2.1 inpaint) → problems:
 
-Each region is processed independently so subtle variations can be tested and compared automatically.
+| issue | cause |
+|-------|------|
+| blue-tinted skin | SD2.1 latent color instability |
+| skin "plastic" look | high-strength diffusion with no identity anchor |
+| identity drift | non-local generation |
 
-2) Solution Summary
+**SDXL fixes this**:
 
-We use Stable Diffusion XL Inpainting — not image generation — which means:
+- higher fidelity skin reflectance
+- more robust fine texture retention
+- larger training corpus
 
-original face stays the same
+---
 
-only specific masked regions are edited
+## Key architecture reference papers
 
-realism is preserved because context stays intact
+> this project stands on the shoulders of these architectures
 
-We generate soft masks (white = editable area) for individual facial regions, and then let SDXL gently rewrite only those pixels.
+| Component | Paper |
+|----------|-------|
+| Diffusion Models | Ho et al., *DDPM* (2020) |
+| Latent Diffusion | Rombach et al., *LDM* (CVPR 2022) |
+| Inpainting Diffusion | Lugmayr et al., *RePaint* (CVPR 2022) |
+| SDXL Architecture | Podell et al., *SDXL* (2023) |
 
-We also run multiple combinations (different strengths + seeds) to automatically find the most aesthetic result.
+---
 
-Example outputs are stored in folders and grids for easy comparison.
+## Conceptual Pipeline Flow
 
-3) Benefits to Users
-User	Benefit
-Cosmetic clinics	helps clients visualize realistic improvement without false promises
-Photographers	subtle retouching without Photoshop skill
-Mobile beauty apps	AI-based enhancement without identity modification
-Social media creators	less editing time, natural aesthetic improvements
+            ┌────────────────────┐
+┌────────────────────┐
 
-This solution is flexible — the entire pipeline can run locally for privacy or in cloud for scale.
+input image ───▶│ region mask builder│
+└───────┬────────────┘
+│ mask (white = editable)
+▼
+┌──────────────┐
+│ SDXL Inpaint │ ← prompt + strength + seed
+└───────┬──────┘
+│
+▼
+partial enhancement (per region)
+│
+▼
+combine regions → final composite
 
-And unlike normal filters:
+---
 
-this is context aware
+## strength and seed explained
 
-retains original skin texture
+| parameter | impact |
+|----------|--------|
+| `strength` | how far from original pixels SDXL is allowed to overwrite. 0.18–0.32 recommended. |
+| `seed` | controls micro-level sampling noise → different subtle texture outcomes |
 
-doesn’t make the face look “plastic”
+> strength = “how aggressive”
+> seed = “which variant of the same idea”
 
-4) Code Usage (How to Use)
+---
 
-Put your face image as test.png in the same folder.
+## installing environment
 
-Run the python script (ex: region_wrinkle_search_sdxl.py).
+onda create -n face-diffusion python=3.10
+conda activate face-diffusion
 
-The script tries different strengths × seeds per region.
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-Output is stored in:
+---
 
-region_out/<region>/
-    s0.24_seed42.png
-    ...
-    <region>_grid.png  <-- Visual comparison sheet
+## How to run basic inpaint
 
+python simple_face_inpaint_sdxl.py
 
-You visually select the best result.
+## How to run batch
 
-5) Technical Section (Detailed)
-Features used:
-Component	Description
-Stable Diffusion XL Inpainting	The model that modifies only masked areas
-PIL	For image resizing / mask drawing
-torch	GPU acceleration + random seeds
-numpy	Basic arithmetic
-region masks	hand-crafted shapes defining forehead, under-eye, smile, chin
-Why SDXL?
+python batch_wrinkle_search.py
 
-SD2.1 inpainting shifts skin tones to blue — unstable for faces
+## How to run region selectors (forehead / under-eye / smile / chin)
 
-SDXL is trained with better natural skin representation
+python region_wrinkle_search_sdxl.py
 
-Outputs are noticeably more realistic / neutral
+---
 
-Seed
+## Future Work
 
-Sets the randomness of the noise starting point.
+| Direction | Value |
+|----------|-------|
+| IP-Adapter identity anchors | language + CLIP identity locking |
+| per-pixel landmark-aware masks | dynamic masks for non-frontal heads |
+| LLM-based aesthetic scoring | automated best-variant selection |
+| gradio web UI | non-technical users |
+| depth-lattice constraint | bone-structure preservation |
 
-same seed → identical output
+---
 
-different seed → slight variations (texture, micro-detail)
+## License
 
-Strength
+For research & non-commercial experimental use.
 
-Controls how much SD is allowed to rewrite the masked area.
+---
 
-low (0.18–0.28) = realistic improvement
+## Conclusion
 
-high (>0.40) = identity risk (“new face”)
+This repository demonstrates a realistic, practical path to **face enhancement without face replacement**.
 
-Core Logic
-for region in [forehead, under-eye, smilelines, chin]:
-    generate region mask
-    call SDXL inpaint with:
-        image = original
-        mask = region mask
-        seed = N
-        strength = S
+Instead of regenerating a new face — we modify *only the wrinkle zones* inside stable diffusion’s native inpainting interface.
 
+The result is a new class of “cosmetic simulation” AI: subtle, structured, region-aware skin refinement.
 
-This is repeated for multiple seeds and strengths — generating multiple options.
-
-A grid is built afterwards to visually compare.
-
-6) Future Improvements
-Improvement	Benefit
-Use face landmark detection to auto-align masks	handles all head poses automatically
-IP-Adapter identity anchors	even stronger identity preservation
-ControlNet-Depth for subtle shape protection	prevents “overblurring” on cheeks / bones
-Real-time Web UI (Gradio)	clinic / app friendly interface
-Memory-based preference learning	learns user’s preferred softness style
-7) Conclusion
-
-This project successfully demonstrates how diffusion models can be applied clinically + commercially to perform subtle, identity-preserving facial cosmetic improvements.
-
-We achieved wrinkle softening without destroying skin texture.
-
-We introduced a clean, research-friendly structure:
-
-region-based masking
-
-grid-based experiment selection
-
-SDXL-based realism
-
-The result is a practical, scalable, privacy-safe method to approximate Botox-like effects.
-
-This is not just an editing pipeline — it is the foundation for a facial aesthetic prediction engine.
-
-With incremental enhancements (landmarks, adapters, evaluators) it can evolve into a production-grade preview tool for dermatology, medical aesthetic marketing, mobile retouching, and online consultations.
